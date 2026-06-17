@@ -34,6 +34,9 @@ func Bootstrap(cfg config.ServiceConfig, logger logging.Logger) (*catalog.Regist
 	if err := registry.Load(svcCfg.Catalog, logger); err != nil {
 		return nil, nil, err
 	}
+	if err := grpcconfig.ValidateEndpoints(cfg.Endpoints); err != nil {
+		return nil, nil, err
+	}
 	SetGlobalRegistry(registry)
 	return registry, svcCfg, nil
 }

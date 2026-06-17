@@ -9,13 +9,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/soheilhy/cmux"
 	"github.com/velonetics/lura/v2/config"
 	"github.com/velonetics/lura/v2/logging"
 	"github.com/velonetics/lura/v2/proxy"
 	router "github.com/velonetics/lura/v2/router/gin"
-	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
+	veloneticsjose "github.com/velonetics/velonetics-jose/v2"
 	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	"github.com/velonetics/velonetics-grpc/v2/client"
+	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -33,31 +34,30 @@ func RunServer(
 	registry *catalog.Registry,
 	serviceCfg *grpcconfig.ServiceConfig,
 	pf proxy.Factory,
+	rejecterF veloneticsjose.RejecterFactory,
 	next router.RunServerFunc,
 ) router.RunServerFunc {
 	if serviceCfg == nil || serviceCfg.Server == nil || len(serviceCfg.Server.Services) == 0 {
 		return next
 	}
 	return func(ctx context.Context, cfg config.ServiceConfig, handler http.Handler) error {
-		addr := cfg.Address
-		if addr == "" {
-			addr = "0.0.0.0"
+		listener, err := net.Listen("tcp", listenAddr(cfg))
+		if err != nil {
+			return err
 		}
-		listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, cfg.Port))
+		listener, err = wrapTLS(listener, cfg)
 		if err != nil {
 			return err
 		}
 
-		grpcServer := grpc.NewServer()
+		opts := grpcServerOptions(serviceCfg.Server)
+		grpcServer := grpc.NewServer(opts...)
 		reflection.Register(grpcServer)
-		if err := registerServices(grpcServer, registry, serviceCfg, pf, logger); err != nil {
+		if err := registerServices(grpcServer, registry, serviceCfg, pf, logger, rejecterF); err != nil {
 			return err
 		}
 
-		mux := cmux.New(listener)
-		grpcListener := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-		httpListener := mux.Match(cmux.Any())
-
+		mux, grpcListener, httpListener := multiplex(listener, cfg)
 		httpServer := &http.Server{Handler: handler}
 		var wg sync.WaitGroup
 		errCh := make(chan error, 3)
@@ -93,7 +93,7 @@ func RunServer(
 			_ = listener.Close()
 		}()
 
-		logger.Info("[SERVICE: gRPC]", "serving gRPC on", fmt.Sprintf("%s:%d", addr, cfg.Port))
+		logger.Info("[SERVICE: gRPC]", "serving gRPC on", listenAddr(cfg))
 		select {
 		case <-ctx.Done():
 			wg.Wait()
@@ -111,6 +111,7 @@ func registerServices(
 	serviceCfg *grpcconfig.ServiceConfig,
 	pf proxy.Factory,
 	logger logging.Logger,
+	rejecterF veloneticsjose.RejecterFactory,
 ) error {
 	for _, svc := range serviceCfg.Server.Services {
 		desc, err := registry.LookupService(svc.Name)
@@ -135,7 +136,7 @@ func registerServices(
 			methodName := string(methodDesc.Name())
 			sd.Methods = append(sd.Methods, grpc.MethodDesc{
 				MethodName: methodName,
-				Handler:    makeUnaryHandler(registry, desc, methodDesc, pub, pf, logger),
+				Handler:    makeUnaryHandler(registry, methodDesc, pub, pf, logger, rejecterF),
 			})
 		}
 		if len(sd.Methods) == 0 {
@@ -148,23 +149,42 @@ func registerServices(
 
 func makeUnaryHandler(
 	registry *catalog.Registry,
-	svc protoreflect.ServiceDescriptor,
 	methodDesc protoreflect.MethodDescriptor,
 	pub grpcconfig.MethodPublishConfig,
 	pf proxy.Factory,
 	logger logging.Logger,
+	rejecterF veloneticsjose.RejecterFactory,
 ) func(interface{}, context.Context, func(interface{}) error, grpc.UnaryServerInterceptor) (interface{}, error) {
+	methodAuth, authErr := buildMethodAuth(logger, rejecterF, pub.ExtraConfig)
 	return func(_ interface{}, ctx context.Context, dec func(interface{}) error, _ grpc.UnaryServerInterceptor) (interface{}, error) {
+		if authErr != nil {
+			return nil, status.Errorf(codes.Internal, "jwt config: %v", authErr)
+		}
+		if err := methodAuth.validate(ctx); err != nil {
+			return nil, err
+		}
 		in := dynamicpb.NewMessage(methodDesc.Input())
 		if err := dec(in); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "decode request: %v", err)
+		}
+		out := dynamicpb.NewMessage(methodDesc.Output())
+		if grpcconfig.IsPassthroughMethod(pub, registry) {
+			backend := pub.Backends[0]
+			cfg, err := grpcconfig.ParseBackendConfigFromBackend(backend)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "backend config: %v", err)
+			}
+			md := metadataFromContext(ctx, pub)
+			if err := client.InvokeProto(ctx, backend, cfg, in, out, md); err != nil {
+				return nil, status.Errorf(codes.Internal, "passthrough: %v", err)
+			}
+			return out, nil
 		}
 
 		req, err := buildProxyRequest(ctx, in, pub)
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "build request: %v", err)
 		}
-
 		proxyPipe, err := buildMethodProxy(pub, pf, logger)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "proxy: %v", err)
@@ -173,12 +193,33 @@ func makeUnaryHandler(
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "backend: %v", err)
 		}
-		out := dynamicpb.NewMessage(methodDesc.Output())
 		if err := fillResponse(out, resp, registry, pub); err != nil {
 			return nil, status.Errorf(codes.Internal, "response: %v", err)
 		}
 		return out, nil
 	}
+}
+
+func metadataFromContext(ctx context.Context, pub grpcconfig.MethodPublishConfig) map[string]string {
+	out := map[string]string{}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return out
+	}
+	for _, allowed := range pub.InputHeaders {
+		if allowed == "*" {
+			for k, vals := range md {
+				if len(vals) > 0 {
+					out[strings.ToLower(k)] = vals[0]
+				}
+			}
+			return out
+		}
+		if vals := md.Get(strings.ToLower(allowed)); len(vals) > 0 {
+			out[strings.ToLower(allowed)] = vals[0]
+		}
+	}
+	return out
 }
 
 func buildProxyRequest(ctx context.Context, in proto.Message, pub grpcconfig.MethodPublishConfig) (*proxy.Request, error) {
@@ -242,18 +283,4 @@ func buildMethodProxy(pub grpcconfig.MethodPublishConfig, pf proxy.Factory, logg
 		Backend:  pub.Backends,
 	}
 	return pf.New(endpoint)
-}
-
-func fillResponse(out proto.Message, resp *proxy.Response, _ *catalog.Registry, _ grpcconfig.MethodPublishConfig) error {
-	if resp == nil {
-		return nil
-	}
-	data, err := io.ReadAll(resp.Io)
-	if err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return nil
-	}
-	return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, out)
 }

@@ -200,6 +200,7 @@ type BackendConfig struct {
 	OutputRemoveUnsetValues  bool
 	InputAssumeBytes         bool
 	MaxCallRecvMsgSize       int
+	ReadBufferSize           int
 	UseAlternateHostOnError  bool
 	IdleConnDisconnectTime   time.Duration
 	ClientTLS                map[string]interface{}
@@ -258,6 +259,12 @@ func ParseBackendConfig(remote *config.Backend, namespace string) (*BackendConfi
 	}
 	if v, ok := raw["max_call_recv_msg_size"].(int); ok && v > 0 {
 		cfg.MaxCallRecvMsgSize = v
+	}
+	if v, ok := raw["read_buffer_size"].(float64); ok {
+		cfg.ReadBufferSize = int(v)
+	}
+	if v, ok := raw["read_buffer_size"].(int); ok {
+		cfg.ReadBufferSize = v
 	}
 	if s, ok := raw["idle_conn_disconnect_time"].(string); ok && s != "" {
 		d, err := time.ParseDuration(s)

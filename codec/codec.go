@@ -61,6 +61,9 @@ func BuildRequestMessage(r *proxy.Request, method protoreflect.MethodDescriptor,
 		return nil, err
 	}
 	opts := protojson.UnmarshalOptions{DiscardUnknown: true}
+	if cfg.RequestNamingConvention == "snake_case" {
+		opts.DiscardUnknown = true
+	}
 	if err := opts.Unmarshal(jsonBytes, msg); err != nil {
 		return nil, fmt.Errorf("grpc request decode: %w", err)
 	}

@@ -80,7 +80,7 @@ func BackendFactory(logger logging.Logger, bf proxy.BackendFactory) proxy.Backen
 }
 
 // InvokeProto performs a unary gRPC call with raw protobuf messages (passthrough mode).
-func InvokeProto(ctx context.Context, remote *config.Backend, cfg *grpcconfig.BackendConfig, req, resp proto.Message) error {
+func InvokeProto(ctx context.Context, remote *config.Backend, cfg *grpcconfig.BackendConfig, req, resp proto.Message, md map[string]string) error {
 	registry := maingrpc.GlobalRegistry()
 	if registry == nil {
 		return fmt.Errorf("grpc catalog not loaded")
@@ -100,7 +100,7 @@ func InvokeProto(ctx context.Context, remote *config.Backend, cfg *grpcconfig.Ba
 		return err
 	}
 	defer pool.close()
-	return invokeWithHosts(ctx, pool, remote.Host, ensureLeadingSlash(remote.URLPattern), req, resp, nil, cfg.UseAlternateHostOnError)
+	return invokeWithHosts(ctx, pool, remote.Host, ensureLeadingSlash(remote.URLPattern), req, resp, md, cfg.UseAlternateHostOnError)
 }
 
 func ensureLeadingSlash(method string) string {

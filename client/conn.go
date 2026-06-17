@@ -12,6 +12,7 @@ import (
 
 	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -33,6 +34,9 @@ func newConnPool(cfg *grpcconfig.BackendConfig) (*connPool, error) {
 	opts := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(cfg.MaxCallRecvMsgSize)),
 	}
+	if cfg.ReadBufferSize > 0 {
+		opts = append(opts, grpc.WithReadBufferSize(cfg.ReadBufferSize))
+	}
 	if cfg.ClientTLS != nil {
 		tlsCfg, err := buildTLS(cfg.ClientTLS)
 		if err != nil {
@@ -53,12 +57,17 @@ func (p *connPool) get(ctx context.Context, host string) (*grpc.ClientConn, erro
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if entry, ok := p.entries[host]; ok {
-		if p.idleTTL <= 0 || time.Since(entry.lastUsed) < p.idleTTL {
+		state := entry.conn.GetState()
+		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
+			_ = entry.conn.Close()
+			delete(p.entries, host)
+		} else if p.idleTTL <= 0 || time.Since(entry.lastUsed) < p.idleTTL {
 			entry.lastUsed = time.Now()
 			return entry.conn, nil
+		} else {
+			_ = entry.conn.Close()
+			delete(p.entries, host)
 		}
-		_ = entry.conn.Close()
-		delete(p.entries, host)
 	}
 	conn, err := grpc.NewClient(host, p.opts...)
 	if err != nil {
@@ -147,6 +156,13 @@ func invokeWithHosts(ctx context.Context, pool *connPool, hosts []string, method
 		if err != nil {
 			lastErr = err
 			continue
+		}
+		if allowRetry {
+			state := conn.GetState()
+			if state == connectivity.TransientFailure || state == connectivity.Shutdown {
+				lastErr = fmt.Errorf("connection in bad state: %s", state)
+				continue
+			}
 		}
 		callCtx := ctx
 		if len(md) > 0 {
