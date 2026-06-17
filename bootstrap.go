@@ -1,0 +1,39 @@
+package grpc
+
+import (
+	"github.com/velonetics/lura/v2/config"
+	"github.com/velonetics/lura/v2/logging"
+	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
+)
+
+var globalRegistry = struct {
+	v *catalog.Registry
+}{}
+
+// SetGlobalRegistry stores the catalog registry for backend and server components.
+func SetGlobalRegistry(r *catalog.Registry) {
+	globalRegistry.v = r
+}
+
+// GlobalRegistry returns the catalog registry set at service startup.
+func GlobalRegistry() *catalog.Registry {
+	return globalRegistry.v
+}
+
+// Bootstrap loads grpc catalog and service config from the gateway configuration.
+func Bootstrap(cfg config.ServiceConfig, logger logging.Logger) (*catalog.Registry, *grpcconfig.ServiceConfig, error) {
+	svcCfg, err := grpcconfig.ParseServiceConfig(cfg.ExtraConfig)
+	if err != nil {
+		if err == grpcconfig.ErrNoConfig {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	registry := catalog.NewRegistry()
+	if err := registry.Load(svcCfg.Catalog, logger); err != nil {
+		return nil, nil, err
+	}
+	SetGlobalRegistry(registry)
+	return registry, svcCfg, nil
+}

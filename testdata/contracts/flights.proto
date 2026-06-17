@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package flight_finder;
+
+option go_package = "github.com/velonetics/velonetics-grpc/v2/testdata/flight_finder";
+
+message Location {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message When {
+  string departure = 1;
+}
+
+message FindFlightRequest {
+  Location where = 1;
+  When when = 2;
+}
+
+message Flight {
+  string id = 1;
+  string destination = 2;
+}
+
+message FindFlightResponse {
+  repeated Flight flights = 1;
+}
+
+service Flights {
+  rpc FindFlight(FindFlightRequest) returns (FindFlightResponse);
+}
