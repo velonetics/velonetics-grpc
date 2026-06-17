@@ -60,7 +60,16 @@ func RunServer(
 		mux, grpcListener, httpListener := multiplex(listener, cfg)
 		httpServer := &http.Server{Handler: handler}
 		var wg sync.WaitGroup
+		var shutdownOnce sync.Once
 		errCh := make(chan error, 3)
+
+		shutdown := func() {
+			shutdownOnce.Do(func() {
+				grpcServer.GracefulStop()
+				_ = httpServer.Shutdown(context.Background())
+				_ = listener.Close()
+			})
+		}
 
 		wg.Add(1)
 		go func() {
@@ -88,9 +97,7 @@ func RunServer(
 
 		go func() {
 			<-ctx.Done()
-			grpcServer.GracefulStop()
-			_ = httpServer.Shutdown(context.Background())
-			_ = listener.Close()
+			shutdown()
 		}()
 
 		logger.Info("[SERVICE: gRPC]", "serving gRPC on", listenAddr(cfg))
@@ -99,6 +106,7 @@ func RunServer(
 			wg.Wait()
 			return ctx.Err()
 		case err := <-errCh:
+			shutdown()
 			wg.Wait()
 			return err
 		}
