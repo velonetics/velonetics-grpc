@@ -72,7 +72,7 @@ func (a *methodAuth) validate(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
-	req, err := requestFromMetadata(ctx, a.scfg.AuthHeaderName)
+	req, err := requestFromMetadata(ctx, a.scfg.AuthHeaderName, a.scfg.CookieKey)
 	if err != nil {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
@@ -114,7 +114,7 @@ func normalizeValidatorExtra(extra config.ExtraConfig) config.ExtraConfig {
 	return extra
 }
 
-func requestFromMetadata(ctx context.Context, header string) (*http.Request, error) {
+func requestFromMetadata(ctx context.Context, header, cookieKey string) (*http.Request, error) {
 	if header == "" {
 		header = "Authorization"
 	}
@@ -122,16 +122,51 @@ func requestFromMetadata(ctx context.Context, header string) (*http.Request, err
 	if !ok {
 		return nil, fmt.Errorf("missing metadata")
 	}
-	vals := md.Get(strings.ToLower(header))
-	if len(vals) == 0 {
-		vals = md.Get(header)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", nil)
+	if vals := md.Get(strings.ToLower(header)); len(vals) > 0 {
+		req.Header.Set(header, vals[0])
+	} else if vals := md.Get(header); len(vals) > 0 {
+		req.Header.Set(header, vals[0])
 	}
-	if len(vals) == 0 {
+	addCookiesFromMetadata(req, md, cookieKey)
+	if req.Header.Get(header) == "" && !hasAuthCookie(req, cookieKey) {
 		return nil, fmt.Errorf("missing authorization metadata")
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "/", nil)
-	req.Header.Set(header, vals[0])
 	return req, nil
+}
+
+func addCookiesFromMetadata(req *http.Request, md metadata.MD, cookieKey string) {
+	if cookieKey == "" {
+		cookieKey = "access_token"
+	}
+	for _, key := range []string{"cookie", "grpcgateway-cookie"} {
+		for _, raw := range md.Get(key) {
+			for _, part := range strings.Split(raw, ";") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				name, value, ok := strings.Cut(part, "=")
+				if !ok {
+					continue
+				}
+				req.AddCookie(&http.Cookie{Name: strings.TrimSpace(name), Value: strings.TrimSpace(value)})
+			}
+		}
+	}
+	if vals := md.Get(cookieKey); len(vals) > 0 {
+		req.AddCookie(&http.Cookie{Name: cookieKey, Value: vals[0]})
+	}
+}
+
+func hasAuthCookie(req *http.Request, cookieKey string) bool {
+	if cookieKey == "" {
+		cookieKey = "access_token"
+	}
+	if _, err := req.Cookie(cookieKey); err == nil {
+		return true
+	}
+	return len(req.Cookies()) > 0
 }
 
 func fromCookie(key string) func(r *http.Request) (*jwt.JSONWebToken, error) {
