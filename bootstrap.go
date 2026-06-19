@@ -1,10 +1,10 @@
 package grpc
 
 import (
-	"github.com/velonetics/lura/v2/config"
-	"github.com/velonetics/lura/v2/logging"
-	"github.com/velonetics/velonetics-grpc/v2/catalog"
-	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
+	"github.com/pucora/lura/v2/config"
+	"github.com/pucora/lura/v2/logging"
+	"github.com/pucora/velonetics-grpc/v2/catalog"
+	grpcconfig "github.com/pucora/velonetics-grpc/v2/config"
 )
 
 var globalRegistry = struct {

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/velonetics/lura/v2/encoding"
-	"github.com/velonetics/lura/v2/proxy"
-	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
-	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	"github.com/pucora/lura/v2/encoding"
+	"github.com/pucora/lura/v2/proxy"
+	grpcconfig "github.com/pucora/velonetics-grpc/v2/config"
+	"github.com/pucora/velonetics-grpc/v2/catalog"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )

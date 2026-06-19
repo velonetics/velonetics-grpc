@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/velonetics/lura/v2/config"
-	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	"github.com/pucora/lura/v2/config"
+	"github.com/pucora/velonetics-grpc/v2/catalog"
 )
 
 // ValidateBackends ensures backend/grpc settings are valid and resolvable against the catalog.

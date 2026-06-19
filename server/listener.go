@@ -6,14 +6,14 @@ import (
 	"net"
 
 	"github.com/soheilhy/cmux"
-	"github.com/velonetics/lura/v2/config"
-	serverhttp "github.com/velonetics/lura/v2/transport/http/server"
+	"github.com/pucora/lura/v2/config"
+	serverhttp "github.com/pucora/lura/v2/transport/http/server"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
-	grpcconfig "github.com/velonetics/velonetics-grpc/v2/config"
+	grpcconfig "github.com/pucora/velonetics-grpc/v2/config"
 )
 
 func grpcServerOptions(serverCfg *grpcconfig.ServerConfig) []grpc.ServerOption {

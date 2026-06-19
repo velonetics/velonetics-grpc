@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/velonetics/lura/v2/config"
-	"github.com/velonetics/lura/v2/encoding"
-	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	"github.com/pucora/lura/v2/config"
+	"github.com/pucora/lura/v2/encoding"
+	"github.com/pucora/velonetics-grpc/v2/catalog"
 )
 
 // BackendNamespace is the extra_config key for backend/grpc settings.
-const BackendNamespace = "github.com/velonetics/velonetics-grpc/v2/client"
+const BackendNamespace = "github.com/pucora/velonetics-grpc/v2/client"
 
 // BackendNamespaceAlias is the short config alias for backend/grpc.
 const BackendNamespaceAlias = "backend/grpc"

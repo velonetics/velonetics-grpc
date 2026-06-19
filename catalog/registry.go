@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/velonetics/lura/v2/logging"
+	"github.com/pucora/lura/v2/logging"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"

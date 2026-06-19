@@ -3,8 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/velonetics/lura/v2/config"
-	"github.com/velonetics/velonetics-grpc/v2/catalog"
+	"github.com/pucora/lura/v2/config"
+	"github.com/pucora/velonetics-grpc/v2/catalog"
 )
 
 func TestValidateBackends_noGRPC(t *testing.T) {

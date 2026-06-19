@@ -1,13 +1,13 @@
-module github.com/velonetics/velonetics-grpc/v2
+module github.com/pucora/velonetics-grpc/v2
 
 go 1.25.0
 
 require (
 	github.com/go-jose/go-jose/v3 v3.0.5
 	github.com/soheilhy/cmux v0.1.5
-	github.com/velonetics/go-auth0/v2 v2.0.0
-	github.com/velonetics/lura/v2 v2.0.1
-	github.com/velonetics/velonetics-jose/v2 v2.0.0
+	github.com/pucora/go-auth0/v2 v2.0.0
+	github.com/pucora/lura/v2 v2.0.1
+	github.com/pucora/velonetics-jose/v2 v2.0.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.63.0
 	go.opentelemetry.io/otel v1.43.0
 	go.opentelemetry.io/otel/metric v1.43.0
@@ -96,7 +96,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
-	github.com/velonetics/flatmap v1.0.0 // indirect
+	github.com/pucora/flatmap v1.0.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
@@ -118,3 +118,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
 )
+
+replace github.com/pucora/lura/v2 => ../velonetics-lura
+
+replace github.com/pucora/velonetics-jose/v2 => ../velonetics-jose
